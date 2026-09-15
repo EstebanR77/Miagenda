@@ -6,40 +6,58 @@ export type Contacto = {
   telefono: string;
 };
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let db: SQLite.SQLiteDatabase | null = null;
 
 async function obtenerBD() {
-  if (!dbPromise) {
-    dbPromise = SQLite.openDatabaseAsync('agenda.db');
-    const db = await dbPromise;
-
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS contactos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL,
-        telefono TEXT NOT NULL
-      );
-    `);
+  if (!db) {
+    db = await SQLite.openDatabaseAsync('agenda.db');
   }
-
-  return dbPromise;
+  return db;
 }
 
-export async function agregarContacto(nombre: string, telefono: string) {
-  const db = await obtenerBD();
-  await db.runAsync(
+export async function iniciarBD(): Promise<void> {
+  const database = await obtenerBD();
+
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS contactos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nombre TEXT NOT NULL,
+      telefono TEXT NOT NULL
+    );
+  `);
+}
+
+export async function obtenerContactos(): Promise<Contacto[]> {
+  const database = await obtenerBD();
+  return await database.getAllAsync<Contacto>(
+    'SELECT * FROM contactos ORDER BY id DESC'
+  );
+}
+
+export async function crearContacto(nombre: string, telefono: string): Promise<void> {
+  const database = await obtenerBD();
+  await database.runAsync(
     'INSERT INTO contactos (nombre, telefono) VALUES (?, ?)',
     nombre,
     telefono
   );
 }
 
-export async function obtenerContactos(): Promise<Contacto[]> {
-  const db = await obtenerBD();
-  return db.getAllAsync<Contacto>('SELECT * FROM contactos ORDER BY id DESC');
+export async function actualizarContacto(
+  id: number,
+  nombre: string,
+  telefono: string
+): Promise<void> {
+  const database = await obtenerBD();
+  await database.runAsync(
+    'UPDATE contactos SET nombre = ?, telefono = ? WHERE id = ?',
+    nombre,
+    telefono,
+    id
+  );
 }
 
-export async function eliminarContacto(id: number) {
-  const db = await obtenerBD();
-  await db.runAsync('DELETE FROM contactos WHERE id = ?', id);
+export async function eliminarContacto(id: number): Promise<void> {
+  const database = await obtenerBD();
+  await database.runAsync('DELETE FROM contactos WHERE id = ?', id);
 }

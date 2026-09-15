@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-  Button,
+  Alert,
   FlatList,
+  Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -9,114 +10,106 @@ import {
   View,
 } from 'react-native';
 
-import { guardarModo, obtenerModo } from '../../localStorage';
 import {
-  agregarContacto,
-  Contacto,
-  eliminarContacto,
-  obtenerContactos,
-} from '../../agendaDB';
+  actualizarTarea,
+  crearTarea,
+  eliminarTarea,
+  obtenerTareas,
+  Tarea,
+} from '../../asyncStorageCRUD';
 
-export default function HomeScreen() {
-  const [modo, setModo] = useState<'claro' | 'oscuro'>('claro');
-  const [nombre, setNombre] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [contactos, setContactos] = useState<Contacto[]>([]);
+export default function AsyncStorageScreen() {
+  const [titulo, setTitulo] = useState('');
+  const [tareas, setTareas] = useState<Tarea[]>([]);
+  const [idEditando, setIdEditando] = useState<string | null>(null);
 
-  const cargarContactos = async () => {
-    const datos = await obtenerContactos();
-    setContactos(datos);
+  const cargarTareas = async () => {
+    setTareas(await obtenerTareas());
   };
 
   useEffect(() => {
-    const cargarDatos = async () => {
-      setModo(await obtenerModo());
-      await cargarContactos();
-    };
-
-    cargarDatos();
+    cargarTareas();
   }, []);
 
-  const cambiarModo = async () => {
-    const nuevoModo = modo === 'claro' ? 'oscuro' : 'claro';
-    await guardarModo(nuevoModo);
-    setModo(nuevoModo);
+  const guardar = async () => {
+    const texto = titulo.trim();
+
+    if (!texto) {
+      Alert.alert('Aviso', 'Escribe una tarea.');
+      return;
+    }
+
+    if (idEditando) {
+      await actualizarTarea(idEditando, texto);
+    } else {
+      await crearTarea(texto);
+    }
+
+    setTitulo('');
+    setIdEditando(null);
+    await cargarTareas();
   };
 
-  const guardarContacto = async () => {
-    if (!nombre.trim() || !telefono.trim()) return;
-
-    await agregarContacto(nombre.trim(), telefono.trim());
-    setNombre('');
-    setTelefono('');
-    await cargarContactos();
+  const editar = (tarea: Tarea) => {
+    setTitulo(tarea.titulo);
+    setIdEditando(tarea.id);
   };
 
-  const borrarContacto = async (id: number) => {
-    await eliminarContacto(id);
-    await cargarContactos();
-  };
+  const borrar = async (id: string) => {
+    await eliminarTarea(id);
 
-  const oscuro = modo === 'oscuro';
+    if (idEditando === id) {
+      setTitulo('');
+      setIdEditando(null);
+    }
+
+    await cargarTareas();
+  };
 
   return (
-    <SafeAreaView style={[styles.container, oscuro && styles.containerOscuro]}>
-      <Text style={[styles.titulo, oscuro && styles.textoOscuro]}>Mi Agenda</Text>
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.titulo}>CRUD con AsyncStorage</Text>
+      <Text style={styles.subtitulo}>Lista de tareas guardada en el dispositivo</Text>
 
-      <View style={styles.seccion}>
-        <Text style={[styles.subtitulo, oscuro && styles.textoOscuro]}>
-          AsyncStorage
+      <TextInput
+        style={styles.input}
+        placeholder="Escribe una tarea"
+        value={titulo}
+        onChangeText={setTitulo}
+      />
+
+      <Pressable style={styles.botonPrincipal} onPress={guardar}>
+        <Text style={styles.textoBoton}>
+          {idEditando ? 'Actualizar tarea' : 'Agregar tarea'}
         </Text>
-        <Text style={[styles.texto, oscuro && styles.textoOscuro]}>
-          Modo guardado: {modo}
-        </Text>
-        <Button title="Cambiar modo" onPress={cambiarModo} />
-      </View>
+      </Pressable>
 
-      <View style={styles.seccion}>
-        <Text style={[styles.subtitulo, oscuro && styles.textoOscuro]}>
-          Contactos con SQLite
-        </Text>
-
-        <TextInput
-          style={[styles.input, oscuro && styles.inputOscuro]}
-          placeholder="Nombre"
-          placeholderTextColor={oscuro ? '#bbbbbb' : '#777777'}
-          value={nombre}
-          onChangeText={setNombre}
-        />
-
-        <TextInput
-          style={[styles.input, oscuro && styles.inputOscuro]}
-          placeholder="Teléfono"
-          placeholderTextColor={oscuro ? '#bbbbbb' : '#777777'}
-          keyboardType="phone-pad"
-          value={telefono}
-          onChangeText={setTelefono}
-        />
-
-        <Button title="Guardar contacto" onPress={guardarContacto} />
-      </View>
+      {idEditando && (
+        <Pressable
+          style={styles.botonCancelar}
+          onPress={() => {
+            setTitulo('');
+            setIdEditando(null);
+          }}>
+          <Text>Cancelar edición</Text>
+        </Pressable>
+      )}
 
       <FlatList
-        data={contactos}
-        keyExtractor={(item) => item.id.toString()}
-        ListEmptyComponent={
-          <Text style={[styles.texto, oscuro && styles.textoOscuro]}>
-            No hay contactos guardados.
-          </Text>
-        }
+        data={tareas}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={<Text style={styles.vacio}>No hay tareas registradas.</Text>}
         renderItem={({ item }) => (
-          <View style={styles.contacto}>
-            <View style={styles.datosContacto}>
-              <Text style={[styles.nombre, oscuro && styles.textoOscuro]}>
-                {item.nombre}
-              </Text>
-              <Text style={[styles.texto, oscuro && styles.textoOscuro]}>
-                {item.telefono}
-              </Text>
+          <View style={styles.tarjeta}>
+            <Text style={styles.nombre}>{item.titulo}</Text>
+            <View style={styles.acciones}>
+              <Pressable style={styles.botonEditar} onPress={() => editar(item)}>
+                <Text>Editar</Text>
+              </Pressable>
+              <Pressable style={styles.botonEliminar} onPress={() => borrar(item.id)}>
+                <Text style={styles.textoEliminar}>Eliminar</Text>
+              </Pressable>
             </View>
-            <Button title="Eliminar" onPress={() => borrarContacto(item.id)} />
           </View>
         )}
       />
@@ -128,56 +121,73 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#ffffff',
-  },
-  containerOscuro: {
-    backgroundColor: '#1c1c1c',
+    backgroundColor: '#fff',
   },
   titulo: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    fontSize: 26,
+    fontWeight: '700',
+    marginTop: 12,
   },
   subtitulo: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  texto: {
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  textoOscuro: {
-    color: '#ffffff',
-  },
-  seccion: {
-    marginBottom: 25,
+    marginTop: 4,
+    marginBottom: 20,
+    color: '#666',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#999999',
-    borderRadius: 6,
-    padding: 10,
+    borderColor: '#bbb',
+    borderRadius: 8,
+    padding: 12,
     marginBottom: 10,
-    color: '#000000',
   },
-  inputOscuro: {
-    borderColor: '#dddddd',
-    color: '#ffffff',
-  },
-  contacto: {
-    flexDirection: 'row',
+  botonPrincipal: {
+    backgroundColor: '#1f6feb',
+    borderRadius: 8,
+    padding: 13,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#cccccc',
   },
-  datosContacto: {
-    flex: 1,
+  textoBoton: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  botonCancelar: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  vacio: {
+    marginTop: 25,
+    textAlign: 'center',
+    color: '#777',
+  },
+  tarjeta: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 14,
+    marginTop: 12,
   },
   nombre: {
     fontSize: 17,
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+  acciones: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  botonEditar: {
+    backgroundColor: '#e9ecef',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  botonEliminar: {
+    backgroundColor: '#dc3545',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  textoEliminar: {
+    color: '#fff',
   },
 });
